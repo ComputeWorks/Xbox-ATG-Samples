@@ -9,7 +9,7 @@
 // http://go.microsoft.com/fwlink/?LinkId=248926
 //-------------------------------------------------------------------------------------
 
-#include "DirectXTexp.h"
+#include "DirectXTexP.h"
 
 #include "filters.h"
 
@@ -116,11 +116,246 @@ namespace
 
         return hr;
     }
+
+
+#if DIRECTX_MATH_VERSION >= 310
+#define VectorSum XMVectorSum
+#else
+    inline XMVECTOR XM_CALLCONV VectorSum
+    (
+        FXMVECTOR V
+    )
+    {
+        XMVECTOR vTemp = XMVectorSwizzle<2, 3, 0, 1>(V);
+        XMVECTOR vTemp2 = XMVectorAdd(V, vTemp);
+        vTemp = XMVectorSwizzle<1, 0, 3, 2>(vTemp2);
+        return XMVectorAdd(vTemp, vTemp2);
+    }
+#endif
+
+
+    HRESULT ScaleAlpha(
+        const Image& srcImage,
+        float alphaScale,
+        const Image& destImage)
+    {
+        assert(srcImage.width == destImage.width);
+        assert(srcImage.height == destImage.height);
+
+        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*srcImage.width), 16)));
+        if (!scanline)
+        {
+            return E_OUTOFMEMORY;
+        }
+
+        const uint8_t* pSrc = srcImage.pixels;
+        uint8_t* pDest = destImage.pixels;
+        if (!pSrc || !pDest)
+        {
+            return E_POINTER;
+        }
+
+        const XMVECTOR vscale = XMVectorReplicate(alphaScale);
+
+        for (size_t h = 0; h < srcImage.height; ++h)
+        {
+            if (!_LoadScanline(scanline.get(), srcImage.width, pSrc, srcImage.rowPitch, srcImage.format))
+            {
+                return E_FAIL;
+            }
+
+            XMVECTOR* ptr = scanline.get();
+            for (size_t w = 0; w < srcImage.width; ++w)
+            {
+                XMVECTOR v = *ptr;
+                XMVECTOR alpha = XMVectorMultiply(XMVectorSplatW(v), vscale);
+                *(ptr++) = XMVectorSelect(alpha, v, g_XMSelect1110);
+            }
+
+            if (!_StoreScanline(pDest, destImage.rowPitch, destImage.format, scanline.get(), srcImage.width))
+            {
+                return E_FAIL;
+            }
+
+            pSrc += srcImage.rowPitch;
+            pDest += destImage.rowPitch;
+        }
+
+        return S_OK;
+    }
+
+
+    void GenerateAlphaCoverageConvolutionVectors(
+        _In_ size_t N,
+        _Out_writes_(N*N) XMVECTOR* vectors)
+    {
+        for (size_t sy = 0; sy < N; ++sy)
+        {
+            const float fy = (sy + 0.5f) / N;
+            const float ify = 1.0f - fy;
+
+            for (size_t sx = 0; sx < N; ++sx)
+            {
+                const float fx = (sx + 0.5f) / N;
+                const float ifx = 1.0f - fx;
+
+                // [0]=(x+0, y+0), [1]=(x+0, y+1), [2]=(x+1, y+0), [3]=(x+1, y+1)
+                vectors[sy * N + sx] = XMVectorSet(ifx * ify, ifx * fy, fx * ify, fx * fy);
+            }
+        }
+    }
+
+
+    HRESULT CalculateAlphaCoverage(
+        const Image& srcImage,
+        float alphaReference,
+        float alphaScale,
+        float& coverage)
+    {
+        coverage = 0.0f;
+
+        ScopedAlignedArrayXMVECTOR row0(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*srcImage.width), 16)));
+        if (!row0)
+        {
+            return E_OUTOFMEMORY;
+        }
+
+        ScopedAlignedArrayXMVECTOR row1(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*srcImage.width), 16)));
+        if (!row1)
+        {
+            return E_OUTOFMEMORY;
+        }
+
+        const DWORD flags = 0;
+        const XMVECTOR scale = XMVectorReplicate(alphaScale);
+
+        const uint8_t *pSrcRow0 = srcImage.pixels;
+        if (!pSrcRow0)
+        {
+            return E_POINTER;
+        }
+
+        const size_t N = 8;
+        XMVECTOR convolution[N * N];
+        GenerateAlphaCoverageConvolutionVectors(N, convolution);
+
+        size_t coverageCount = 0;
+        for (size_t y = 0; y < srcImage.height - 1; ++y)
+        {
+            if (!_LoadScanlineLinear(row0.get(), srcImage.width, pSrcRow0, srcImage.rowPitch, srcImage.format, flags))
+            {
+                return E_FAIL;
+            }
+
+            const uint8_t *pSrcRow1 = pSrcRow0 + srcImage.rowPitch;
+            if (!_LoadScanlineLinear(row1.get(), srcImage.width, pSrcRow1, srcImage.rowPitch, srcImage.format, flags))
+            {
+                return E_FAIL;
+            }
+
+            const XMVECTOR* pRow0 = row0.get();
+            const XMVECTOR* pRow1 = row1.get();
+            for (size_t x = 0; x < srcImage.width - 1; ++x)
+            {
+                // [0]=(x+0, y+0), [1]=(x+0, y+1), [2]=(x+1, y+0), [3]=(x+1, y+1)
+                XMVECTOR v1 = XMVectorSaturate(XMVectorMultiply(XMVectorSplatW(*pRow0), scale));
+                XMVECTOR v2 = XMVectorSaturate(XMVectorMultiply(XMVectorSplatW(*pRow1), scale));
+                XMVECTOR v3 = XMVectorSaturate(XMVectorMultiply(XMVectorSplatW(*(pRow0++)), scale));
+                XMVECTOR v4 = XMVectorSaturate(XMVectorMultiply(XMVectorSplatW(*(pRow1++)), scale));
+
+                v1 = XMVectorMergeXY(v1, v2); // [v1.x v2.x --- ---]
+                v3 = XMVectorMergeXY(v3, v4); // [v3.x v4.x --- ---]
+
+                XMVECTOR v = XMVectorPermute<0, 1, 4, 5>(v1, v3); // [v1.x v2.x v3.x v4.x]
+
+                for (size_t sy = 0; sy < N; ++sy)
+                {
+                    const size_t ry = sy * N;
+                    for (size_t sx = 0; sx < N; ++sx)
+                    {
+                        v = VectorSum(XMVectorMultiply(v, convolution[ry + sx]));
+                        if (XMVectorGetX(v) > alphaReference)
+                        {
+                            ++coverageCount;
+                        }
+                    }
+                }
+            }
+
+            pSrcRow0 = pSrcRow1;
+        }
+
+        float cscale = static_cast<float>((srcImage.width - 1) * (srcImage.height - 1) * N * N);
+        if (cscale > 0.f)
+        {
+            coverage = static_cast<float>(coverageCount) / cscale;
+        }
+
+        return S_OK;
+    }
+
+
+    HRESULT EstimateAlphaScaleForCoverage(
+            const Image& srcImage,
+            float alphaReference,
+            float targetCoverage,
+            float& alphaScale)
+    {
+        float minAlphaScale = 0.0f;
+        float maxAlphaScale = 4.0f;
+        float bestAlphaScale = 1.0f;
+        float bestError = FLT_MAX;
+
+        // Determine desired scale using a binary search. Hardcoded to 10 steps max.
+        alphaScale = 1.0f;
+        const size_t N = 10;
+        for (size_t i = 0; i < N; ++i)
+        {
+            float currentCoverage = 0.0f;
+            HRESULT hr = CalculateAlphaCoverage(srcImage, alphaReference, alphaScale, currentCoverage);
+            if (FAILED(hr))
+            {
+                return hr;
+            }
+
+            const float error = fabsf(currentCoverage - targetCoverage);
+            if (error < bestError)
+            {
+                bestError = error;
+                bestAlphaScale = alphaScale;
+            }
+
+            if (currentCoverage < targetCoverage)
+            {
+                minAlphaScale = alphaScale;
+            }
+            else if (currentCoverage > targetCoverage)
+            {
+                maxAlphaScale = alphaScale;
+            }
+            else
+            {
+                break;
+            }
+
+            alphaScale = (minAlphaScale + maxAlphaScale) * 0.5f;
+        }
+
+        return S_OK;
+    }
 }
 
 
 namespace DirectX
 {
+    bool _CalculateMipLevels(_In_ size_t width, _In_ size_t height, _Inout_ size_t& mipLevels);
+    bool _CalculateMipLevels3D(_In_ size_t width, _In_ size_t height, _In_ size_t depth, _Inout_ size_t& mipLevels);
+        // Also used by Compress
+
+    HRESULT _ResizeSeparateColorAndAlpha(_In_ IWICImagingFactory* pWIC, _In_ bool iswic2, _In_ IWICBitmap* original,
+        _In_ size_t newWidth, _In_ size_t newHeight, _In_ DWORD filter, _Inout_ const Image* img);
+        // Also used by Resize
+
     bool _CalculateMipLevels(_In_ size_t width, _In_ size_t height, _Inout_ size_t& mipLevels)
     {
         if (mipLevels > 1)
@@ -160,14 +395,15 @@ namespace DirectX
     }
 
     //--- Resizing color and alpha channels separately using WIC ---
+    _Use_decl_annotations_
     HRESULT _ResizeSeparateColorAndAlpha(
-        _In_ IWICImagingFactory* pWIC,
-        _In_ bool iswic2,
-        _In_ IWICBitmap* original,
-        _In_ size_t newWidth,
-        _In_ size_t newHeight,
-        _In_ DWORD filter,
-        _Inout_ const Image* img)
+        IWICImagingFactory* pWIC,
+        bool iswic2,
+        IWICBitmap* original,
+        size_t newWidth,
+        size_t newHeight,
+        DWORD filter,
+        const Image* img)
     {
         if (!pWIC || !original || !img)
             return E_POINTER;
@@ -808,7 +1044,7 @@ namespace
                 {
                     size_t x2 = x << 1;
 
-                    AVERAGE4(target[x], urow0[x2], urow1[x2], urow2[x2], urow3[x2]);
+                    AVERAGE4(target[x], urow0[x2], urow1[x2], urow2[x2], urow3[x2])
                 }
 
                 if (!_StoreScanlineLinear(pDest, dest->rowPitch, dest->format, target, nwidth, filter))
@@ -920,7 +1156,7 @@ namespace
                 {
                     auto& toX = lfX[x];
 
-                    BILINEAR_INTERPOLATE(target[x], toX, toY, row0, row1);
+                    BILINEAR_INTERPOLATE(target[x], toX, toY, row0, row1)
                 }
 
                 if (!_StoreScanlineLinear(pDest, dest->rowPitch, dest->format, target, nwidth, filter))
@@ -1100,12 +1336,12 @@ namespace
 
                     XMVECTOR C0, C1, C2, C3;
 
-                    CUBIC_INTERPOLATE(C0, toX.x, row0[toX.u0], row0[toX.u1], row0[toX.u2], row0[toX.u3]);
-                    CUBIC_INTERPOLATE(C1, toX.x, row1[toX.u0], row1[toX.u1], row1[toX.u2], row1[toX.u3]);
-                    CUBIC_INTERPOLATE(C2, toX.x, row2[toX.u0], row2[toX.u1], row2[toX.u2], row2[toX.u3]);
-                    CUBIC_INTERPOLATE(C3, toX.x, row3[toX.u0], row3[toX.u1], row3[toX.u2], row3[toX.u3]);
+                    CUBIC_INTERPOLATE(C0, toX.x, row0[toX.u0], row0[toX.u1], row0[toX.u2], row0[toX.u3])
+                    CUBIC_INTERPOLATE(C1, toX.x, row1[toX.u0], row1[toX.u1], row1[toX.u2], row1[toX.u3])
+                    CUBIC_INTERPOLATE(C2, toX.x, row2[toX.u0], row2[toX.u1], row2[toX.u2], row2[toX.u3])
+                    CUBIC_INTERPOLATE(C3, toX.x, row3[toX.u0], row3[toX.u1], row3[toX.u2], row3[toX.u3])
 
-                    CUBIC_INTERPOLATE(target[x], toY.x, C0, C1, C2, C3);
+                    CUBIC_INTERPOLATE(target[x], toY.x, C0, C1, C2, C3)
                 }
 
                 if (!_StoreScanlineLinear(pDest, dest->rowPitch, dest->format, target, nwidth, filter))
@@ -1646,7 +1882,7 @@ namespace
                             size_t x2 = x << 1;
 
                             AVERAGE8(target[x], urow0[x2], urow1[x2], urow2[x2], urow3[x2],
-                                vrow0[x2], vrow1[x2], vrow2[x2], vrow3[x2]);
+                                vrow0[x2], vrow1[x2], vrow2[x2], vrow3[x2])
                         }
 
                         if (!_StoreScanlineLinear(pDest, dest->rowPitch, dest->format, target, nwidth, filter))
@@ -1689,7 +1925,7 @@ namespace
                     {
                         size_t x2 = x << 1;
 
-                        AVERAGE4(target[x], urow0[x2], urow1[x2], urow2[x2], urow3[x2]);
+                        AVERAGE4(target[x], urow0[x2], urow1[x2], urow2[x2], urow3[x2])
                     }
 
                     if (!_StoreScanlineLinear(pDest, dest->rowPitch, dest->format, target, nwidth, filter))
@@ -1822,7 +2058,7 @@ namespace
                         {
                             auto& toX = lfX[x];
 
-                            TRILINEAR_INTERPOLATE(target[x], toX, toY, toZ, urow0, urow1, vrow0, vrow1);
+                            TRILINEAR_INTERPOLATE(target[x], toX, toY, toZ, urow0, urow1, vrow0, vrow1)
                         }
 
                         if (!_StoreScanlineLinear(pDest, dest->rowPitch, dest->format, target, nwidth, filter))
@@ -1882,7 +2118,7 @@ namespace
                     {
                         auto& toX = lfX[x];
 
-                        BILINEAR_INTERPOLATE(target[x], toX, toY, urow0, urow1);
+                        BILINEAR_INTERPOLATE(target[x], toX, toY, urow0, urow1)
                     }
 
                     if (!_StoreScanlineLinear(pDest, dest->rowPitch, dest->format, target, nwidth, filter))
@@ -2124,15 +2360,15 @@ namespace
                             for (size_t j = 0; j < 4; ++j)
                             {
                                 XMVECTOR C0, C1, C2, C3;
-                                CUBIC_INTERPOLATE(C0, toX.x, urow[j][toX.u0], urow[j][toX.u1], urow[j][toX.u2], urow[j][toX.u3]);
-                                CUBIC_INTERPOLATE(C1, toX.x, vrow[j][toX.u0], vrow[j][toX.u1], vrow[j][toX.u2], vrow[j][toX.u3]);
-                                CUBIC_INTERPOLATE(C2, toX.x, srow[j][toX.u0], srow[j][toX.u1], srow[j][toX.u2], srow[j][toX.u3]);
-                                CUBIC_INTERPOLATE(C3, toX.x, trow[j][toX.u0], trow[j][toX.u1], trow[j][toX.u2], trow[j][toX.u3]);
+                                CUBIC_INTERPOLATE(C0, toX.x, urow[j][toX.u0], urow[j][toX.u1], urow[j][toX.u2], urow[j][toX.u3])
+                                CUBIC_INTERPOLATE(C1, toX.x, vrow[j][toX.u0], vrow[j][toX.u1], vrow[j][toX.u2], vrow[j][toX.u3])
+                                CUBIC_INTERPOLATE(C2, toX.x, srow[j][toX.u0], srow[j][toX.u1], srow[j][toX.u2], srow[j][toX.u3])
+                                CUBIC_INTERPOLATE(C3, toX.x, trow[j][toX.u0], trow[j][toX.u1], trow[j][toX.u2], trow[j][toX.u3])
 
-                                CUBIC_INTERPOLATE(D[j], toY.x, C0, C1, C2, C3);
+                                CUBIC_INTERPOLATE(D[j], toY.x, C0, C1, C2, C3)
                             }
 
-                            CUBIC_INTERPOLATE(target[x], toZ.x, D[0], D[1], D[2], D[3]);
+                            CUBIC_INTERPOLATE(target[x], toZ.x, D[0], D[1], D[2], D[3])
                         }
 
                         if (!_StoreScanlineLinear(pDest, dest->rowPitch, dest->format, target, nwidth, filter))
@@ -2256,12 +2492,12 @@ namespace
                         auto& toX = cfX[x];
 
                         XMVECTOR C0, C1, C2, C3;
-                        CUBIC_INTERPOLATE(C0, toX.x, urow[0][toX.u0], urow[0][toX.u1], urow[0][toX.u2], urow[0][toX.u3]);
-                        CUBIC_INTERPOLATE(C1, toX.x, vrow[0][toX.u0], vrow[0][toX.u1], vrow[0][toX.u2], vrow[0][toX.u3]);
-                        CUBIC_INTERPOLATE(C2, toX.x, srow[0][toX.u0], srow[0][toX.u1], srow[0][toX.u2], srow[0][toX.u3]);
-                        CUBIC_INTERPOLATE(C3, toX.x, trow[0][toX.u0], trow[0][toX.u1], trow[0][toX.u2], trow[0][toX.u3]);
+                        CUBIC_INTERPOLATE(C0, toX.x, urow[0][toX.u0], urow[0][toX.u1], urow[0][toX.u2], urow[0][toX.u3])
+                        CUBIC_INTERPOLATE(C1, toX.x, vrow[0][toX.u0], vrow[0][toX.u1], vrow[0][toX.u2], vrow[0][toX.u3])
+                        CUBIC_INTERPOLATE(C2, toX.x, srow[0][toX.u0], srow[0][toX.u1], srow[0][toX.u2], srow[0][toX.u3])
+                        CUBIC_INTERPOLATE(C3, toX.x, trow[0][toX.u0], trow[0][toX.u1], trow[0][toX.u2], trow[0][toX.u3])
 
-                        CUBIC_INTERPOLATE(target[x], toY.x, C0, C1, C2, C3);
+                        CUBIC_INTERPOLATE(target[x], toY.x, C0, C1, C2, C3)
                     }
 
                     if (!_StoreScanlineLinear(pDest, dest->rowPitch, dest->format, target, nwidth, filter))
@@ -3178,4 +3414,76 @@ HRESULT DirectX::GenerateMipMaps3D(
     default:
         return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
     }
+}
+
+_Use_decl_annotations_
+HRESULT DirectX::ScaleMipMapsAlphaForCoverage(
+    const Image* srcImages,
+    size_t nimages,
+    const TexMetadata& metadata,
+    size_t item,
+    float alphaReference,
+    ScratchImage& mipChain)
+{
+    if (!srcImages || !nimages || !IsValid(metadata.format) || nimages > metadata.mipLevels || !mipChain.GetImages())
+        return E_INVALIDARG;
+
+    if (metadata.IsVolumemap()
+        || IsCompressed(metadata.format) || IsTypeless(metadata.format) || IsPlanar(metadata.format) || IsPalettized(metadata.format))
+        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+
+    if (srcImages[0].format != metadata.format || srcImages[0].width != metadata.width || srcImages[0].height != metadata.height)
+    {
+        // Base image must be the same format, width, and height
+        return E_FAIL;
+    }
+
+    float targetCoverage = 0.0f;
+    HRESULT hr = CalculateAlphaCoverage(srcImages[0], alphaReference, 1.0f, targetCoverage);
+    if (FAILED(hr))
+        return hr;
+
+    // Copy base image
+    {
+        const Image& src = srcImages[0];
+
+        const Image *dest = mipChain.GetImage(0, item, 0);
+        if (!dest)
+            return E_POINTER;
+
+        uint8_t* pDest = dest->pixels;
+        if (!pDest)
+            return E_POINTER;
+
+        const uint8_t *pSrc = src.pixels;
+        size_t rowPitch = src.rowPitch;
+        for (size_t h = 0; h < metadata.height; ++h)
+        {
+            size_t msize = std::min<size_t>(dest->rowPitch, rowPitch);
+            memcpy_s(pDest, dest->rowPitch, pSrc, msize);
+            pSrc += rowPitch;
+            pDest += dest->rowPitch;
+        }
+    }
+
+    for (size_t level = 1; level < metadata.mipLevels; ++level)
+    {
+        if (level >= nimages)
+            return E_FAIL;
+
+        float alphaScale = 0.0f;
+        hr = EstimateAlphaScaleForCoverage(srcImages[level], alphaReference, targetCoverage, alphaScale);
+        if (FAILED(hr))
+            return hr;
+
+        const Image* mipImage = mipChain.GetImage(level, item, 0);
+        if (!mipImage)
+            return E_POINTER;
+
+        hr = ScaleAlpha(srcImages[level], alphaScale, *mipImage);
+        if (FAILED(hr))
+            return hr;
+    }
+    
+    return S_OK;
 }

@@ -14,11 +14,11 @@
 
 // A basic sample implementation that creates a D3D11 device and
 // provides a render loop.
-class Sample : public DX::IDeviceNotify
+class Sample final : public DX::IDeviceNotify
 {
 public:
 
-    Sample();
+    Sample() noexcept(false);
 
     // Initialization and management
     void Initialize(IUnknown* window, int width, int height, DXGI_MODE_ROTATION rotation);

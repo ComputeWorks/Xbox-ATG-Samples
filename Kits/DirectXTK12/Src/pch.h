@@ -35,15 +35,13 @@
 // C5045 Spectre mitigation warning
 
 // XBox One XDK related Off by default warnings
-#pragma warning(disable : 4471 4917 4986 5043)
+#pragma warning(disable : 4471 4643 4917 4986 5029 5043)
 // C4471 forward declaration of an unscoped enumeration must have an underlying type
+// C4643 Forward declaring in namespace std is not permitted by the C++ Standard
 // C4917 a GUID can only be associated with a class, interface or namespace
 // C4986 exception specification does not match previous declaration
+// C5029 nonstandard extension used
 // C5043 exception specification does not match previous declaration
-
-// Xbox One XDK related Off by default warnings
-#pragma warning(disable : 4643)
-// C4643 Forward declaring in namespace std is not permitted by the C++ Standard
 
 #ifdef __INTEL_COMPILER
 #pragma warning(disable : 161 2960 3280)
@@ -52,9 +50,30 @@
 // message #3280: declaration hides member
 #endif
 
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wc++98-compat"
+#pragma clang diagnostic ignored "-Wc++98-compat-pedantic"
+#pragma clang diagnostic ignored "-Wc++98-compat-local-type-template-args"
+#pragma clang diagnostic ignored "-Wcovered-switch-default"
+#pragma clang diagnostic ignored "-Wexit-time-destructors"
+#pragma clang diagnostic ignored "-Wfloat-equal"
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+#pragma clang diagnostic ignored "-Wgnu-anonymous-struct"
+#pragma clang diagnostic ignored "-Wlanguage-extension-token"
+#pragma clang diagnostic ignored "-Wmissing-variable-declarations"
+#pragma clang diagnostic ignored "-Wnested-anon-types"
+#pragma clang diagnostic ignored "-Wreserved-id-macro"
+#pragma clang diagnostic ignored "-Wswitch-enum"
+#pragma clang diagnostic ignored "-Wunknown-pragmas"
+#pragma clang diagnostic ignored "-Wunused-const-variable"
+#endif
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
 #pragma warning(push)
 #pragma warning(disable : 4005)
-#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #define NODRAWTEXT
 #define NOGDI
@@ -64,7 +83,7 @@
 #define NOHELP
 #pragma warning(pop)
 
-#include <windows.h>
+#include <Windows.h>
 
 #ifndef _WIN32_WINNT_WIN10
 #define _WIN32_WINNT_WIN10 0x0A00
@@ -79,13 +98,22 @@
 
 #include <d3d12_x.h> // core 12.x header
 #include <d3dx12_x.h>  // utility 12.x header
-#define DCOMMON_H_INCLUDED
 #else
 #include <dxgi1_4.h>
 #include <d3d12.h>
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wsign-conversion"
+#pragma clang diagnostic ignored "-Wtautological-type-limit-compare"
+#endif
+
 #define D3DX12_NO_STATE_OBJECT_HELPERS
 #include "d3dx12.h"
+#endif
+
+#ifdef __clang__
+#pragma clang diagnostic pop
 #endif
 
 #if (defined(WINAPI_FAMILY) && (WINAPI_FAMILY == WINAPI_FAMILY_APP)) || (defined(_XBOX_ONE) && defined(_TITLE))
@@ -102,6 +130,7 @@
 #include <DirectXCollision.h>
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <exception>
 #include <future>
@@ -135,7 +164,7 @@
 
 // DirectX Tool Kit for Audio is in all versions of DirectXTK12
 #include <mmreg.h>
-#include <audioclient.h>
+#include <Audioclient.h>
 
 #ifndef XAUDIO2_HELPER_FUNCTIONS
 #define XAUDIO2_HELPER_FUNCTIONS

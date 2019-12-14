@@ -10,46 +10,48 @@
 
 #pragma once
 
-#if defined(WINAPI_FAMILY) && (WINAPI_FAMILY != WINAPI_FAMILY_DESKTOP_APP)
-#error This header only works with Windows desktop apps
-#endif
-
 #include <exception>
 #include <string.h>
 
 
 namespace DX
 {
-    inline void FindMediaFile(_Out_writes_(cchDest) wchar_t* strDestPath, _In_ int cchDest, _In_z_ const wchar_t* strFilename)
+    inline void FindMediaFile(
+        _Out_writes_(cchDest) wchar_t* strDestPath,
+        _In_ int cchDest,
+        _In_z_ const wchar_t* strFilename,
+        _In_opt_ const wchar_t* const * searchFolders = nullptr)
     {
-        bool bFound = false;
-
         if (!strFilename || strFilename[0] == 0 || !strDestPath || cchDest < 10)
             throw std::invalid_argument("FindMediaFile");
 
+        // Check CWD for quick out
+        wcscpy_s(strDestPath, size_t(cchDest), strFilename);
+        if (GetFileAttributesW(strDestPath) != 0xFFFFFFFF)
+            return;
+
         // Get the exe name, and exe path
         wchar_t strExePath[MAX_PATH] = {};
-        wchar_t strExeName[MAX_PATH] = {};
-        wchar_t* strLastSlash = nullptr;
-        GetModuleFileName(nullptr, strExePath, MAX_PATH);
+        GetModuleFileNameW(nullptr, strExePath, MAX_PATH);
         strExePath[MAX_PATH - 1] = 0;
-        strLastSlash = wcsrchr(strExePath, TEXT('\\'));
-        if (strLastSlash)
+
+        static const wchar_t* s_defSearchFolders[] =
         {
-            wcscpy_s(strExeName, MAX_PATH, &strLastSlash[1]);
+            L"Assets",
+            L"Media",
+            L"Media\\Textures",
+            L"Media\\Fonts",
+            L"Media\\Meshes",
+            L"Media\\PBR",
+            L"Media\\CubeMaps",
+            L"Media\\HDR",
+            L"Media\\Sounds",
+            L"Media\\Videos",
+            0
+        };
 
-            // Chop the exe name from the exe path
-            *strLastSlash = 0;
-
-            // Chop the .exe from the exe name
-            strLastSlash = wcsrchr(strExeName, TEXT('.'));
-            if (strLastSlash)
-                *strLastSlash = 0;
-        }
-
-        wcscpy_s(strDestPath, cchDest, strFilename);
-        if (GetFileAttributes(strDestPath) != 0xFFFFFFFF)
-            return;
+        if (!searchFolders)
+            searchFolders = s_defSearchFolders;
 
         // Search all parent directories starting at .\ and using strFilename as the leaf name
         wchar_t strLeafName[MAX_PATH] = {};
@@ -60,36 +62,35 @@ namespace DX
         wchar_t strSearch[MAX_PATH] = {};
         wchar_t* strFilePart = nullptr;
 
-        GetFullPathName(strExePath, MAX_PATH, strFullPath, &strFilePart);
+        GetFullPathNameW(strExePath, MAX_PATH, strFullPath, &strFilePart);
         if (!strFilePart)
             throw std::exception("FindMediaFile");
 
         while (strFilePart && *strFilePart != '\0')
         {
             swprintf_s(strFullFileName, MAX_PATH, L"%ls\\%ls", strFullPath, strLeafName);
-            if (GetFileAttributes(strFullFileName) != 0xFFFFFFFF)
+            if (GetFileAttributesW(strFullFileName) != 0xFFFFFFFF)
             {
-                wcscpy_s(strDestPath, cchDest, strFullFileName);
-                bFound = true;
-                break;
+                wcscpy_s(strDestPath, size_t(cchDest), strFullFileName);
+                return;
             }
 
-            swprintf_s(strFullFileName, MAX_PATH, L"%ls\\%ls\\%ls", strFullPath, strExeName, strLeafName);
-            if (GetFileAttributes(strFullFileName) != 0xFFFFFFFF)
+            for (const wchar_t* const * searchFolder = searchFolders; *searchFolder != 0; ++searchFolder)
             {
-                wcscpy_s(strDestPath, cchDest, strFullFileName);
-                bFound = true;
-                break;
+                swprintf_s(strFullFileName, MAX_PATH, L"%ls\\%ls\\%ls", strFullPath, *searchFolder, strLeafName);
+                if (GetFileAttributesW(strFullFileName) != 0xFFFFFFFF)
+                {
+                    wcscpy_s(strDestPath, size_t(cchDest), strFullFileName);
+                    return;
+                }
             }
 
             swprintf_s(strSearch, MAX_PATH, L"%ls\\..", strFullPath);
-            GetFullPathName(strSearch, MAX_PATH, strFullPath, &strFilePart);
+            GetFullPathNameW(strSearch, MAX_PATH, strFullPath, &strFilePart);
         }
-        if (bFound)
-            return;
 
-        // On failure, return the file as the path but also return an error code
-        wcscpy_s(strDestPath, cchDest, strFilename);
+        // On failure, return the file as the path but also throw an error
+        wcscpy_s(strDestPath, size_t(cchDest), strFilename);
 
         throw std::exception("File not found");
     }

@@ -1,3 +1,4 @@
+
 //--------------------------------------------------------------------------------------
 // File: ScreenGrab.h
 //
@@ -23,10 +24,8 @@
 #include <d3d11_1.h>
 #endif
 
-#include <ocidl.h>
-
+#include <OCIdl.h>
 #include <functional>
-#include <stdint.h>
 
 
 namespace DirectX
@@ -42,5 +41,6 @@ namespace DirectX
         _In_ REFGUID guidContainerFormat,
         _In_z_ const wchar_t* fileName,
         _In_opt_ const GUID* targetFormat = nullptr,
-        _In_opt_ std::function<void __cdecl(IPropertyBag2*)> setCustomProps = nullptr);
+        _In_opt_ std::function<void __cdecl(IPropertyBag2*)> setCustomProps = nullptr,
+        _In_ bool forceSRGB = false);
 }

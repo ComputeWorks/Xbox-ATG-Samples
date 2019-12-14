@@ -83,7 +83,7 @@ namespace
 
 #pragma warning(push)
 #pragma warning(disable : 4471)
-#include <Windows.Gaming.Input.h>
+#include <windows.gaming.input.h>
 #pragma warning(pop)
 
 class GamePad::Impl
@@ -228,6 +228,8 @@ public:
     void GetCapabilities(int player, Capabilities& caps)
     {
         using namespace Microsoft::WRL;
+        using namespace Microsoft::WRL::Wrappers;
+        using namespace ABI::Windows::Foundation;
         using namespace ABI::Windows::System;
         using namespace ABI::Windows::Gaming::Input;
 
@@ -246,6 +248,7 @@ public:
                 caps.connected = true;
                 caps.gamepadType = Capabilities::GAMEPAD;
                 caps.id.clear();
+                caps.vid = caps.pid = 0;
 
                 ComPtr<IGameController> ctrl;
                 HRESULT hr = mGamePad[player].As(&ctrl);
@@ -255,13 +258,32 @@ public:
                     hr = ctrl->get_User(user.GetAddressOf());
                     if (SUCCEEDED(hr) && user != nullptr)
                     {
-                        Wrappers::HString str;
+                        HString str;
                         hr = user->get_NonRoamableId(str.GetAddressOf());
                         if (SUCCEEDED(hr))
                         {
                             caps.id = str.GetRawBuffer(nullptr);
                         }
                     }
+
+                // Requires the Windows 10 Creators Update SDK (15063)
+                #if defined(NTDDI_WIN10_RS2) && (NTDDI_VERSION >= NTDDI_WIN10_RS2)
+                    ComPtr<IRawGameControllerStatics> rawStatics;
+                    hr = GetActivationFactory(HStringReference(RuntimeClass_Windows_Gaming_Input_RawGameController).Get(), rawStatics.GetAddressOf());
+                    if (SUCCEEDED(hr))
+                    {
+                        ComPtr<IRawGameController> raw;
+                        hr = rawStatics->FromGameController(ctrl.Get(), raw.GetAddressOf());
+                        if (SUCCEEDED(hr) && raw)
+                        {
+                            if (FAILED(raw->get_HardwareVendorId(&caps.vid)))
+                                caps.vid = 0;
+
+                            if (FAILED(raw->get_HardwareProductId(&caps.pid)))
+                                caps.pid = 0;
+                        }
+                    }
+                #endif // NTDDI_WIN10_RS2
                 }
                 return;
             }
@@ -283,10 +305,10 @@ public:
             if (mGamePad[player])
             {
                 GamepadVibration vib;
-                vib.LeftMotor = leftMotor;
-                vib.RightMotor = rightMotor;
-                vib.LeftTrigger = leftTrigger;
-                vib.RightTrigger = rightTrigger;
+                vib.LeftMotor = double(leftMotor);
+                vib.RightMotor = double(rightMotor);
+                vib.LeftTrigger = double(leftTrigger);
+                vib.RightTrigger = double(rightTrigger);
                 HRESULT hr = mGamePad[player]->put_Vibration(vib);
 
                 if (SUCCEEDED(hr))
@@ -691,6 +713,8 @@ public:
             {
                 caps.connected = true;
                 caps.gamepadType = Capabilities::UNKNOWN;
+                caps.id = 0;
+                caps.vid = caps.pid = 0;
 
                 ComPtr<IController> ctrl;
                 HRESULT hr = mGamePad[player].As(&ctrl);
@@ -719,8 +743,19 @@ public:
                         }
                     }
                 }
-                else
-                    caps.id = 0;
+
+            #if _XDK_VER >= 0x42ED07E4 /* XDK Edition 180400 */
+                ComPtr<IController3> ctrl3;
+                hr = mGamePad[player].As(&ctrl3);
+                if (SUCCEEDED(hr) && ctrl3)
+                {
+                    if (FAILED(ctrl3->get_HardwareVendorId(&caps.vid)))
+                        caps.vid = 0;
+
+                    if (FAILED(ctrl3->get_HardwareProductId(&caps.pid)))
+                        caps.pid = 0;
+                }
+            #endif
 
                 return;
             }
@@ -880,7 +915,7 @@ GamePad::Impl* GamePad::Impl::s_gamePad = nullptr;
 // XInput
 //======================================================================================
 
-#include <xinput.h>
+#include <Xinput.h>
 
 static_assert(GamePad::MAX_PLAYER_COUNT == XUSER_MAX_COUNT, "xinput.h mismatch");
 
@@ -1034,6 +1069,14 @@ public:
                     caps.gamepadType = Capabilities::Type(xcaps.SubType);
                 }
 
+                // Hard-coded VID/PID
+                caps.vid = 0x045E;
+            #if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
+                caps.pid = (xcaps.Flags & XINPUT_CAPS_WIRELESS) ? 0x0719 : 0;
+            #else
+                caps.pid = 0;
+            #endif
+
                 return;
             }
         }
@@ -1169,7 +1212,7 @@ private:
         {
             if (!mConnected[j])
             {
-                LONGLONG delta = time - mLastReadTime[j];
+                LONGLONG delta = LONGLONG(time) - LONGLONG(mLastReadTime[j]);
 
                 LONGLONG interval = 1000;
                 if (j != player)
@@ -1280,7 +1323,7 @@ void GamePad::Resume()
 }
 
 
-#if (_WIN32_WINNT >= 0x0A00 /*_WIN32_WINNT_WIN10*/ ) || defined(_XBOX_ONE)
+#if (_WIN32_WINNT >= _WIN32_WINNT_WIN10) || defined(_XBOX_ONE)
 void GamePad::RegisterEvents(HANDLE ctrlChanged, HANDLE userChanged)
 {
     pImpl->mCtrlChanged = (!ctrlChanged) ? INVALID_HANDLE_VALUE : ctrlChanged;
@@ -1307,25 +1350,25 @@ GamePad& GamePad::Get()
 
 void GamePad::ButtonStateTracker::Update(const GamePad::State& state)
 {
-    UPDATE_BUTTON_STATE(a);
+    UPDATE_BUTTON_STATE(a)
 
     assert((!state.buttons.a && !lastState.buttons.a) == (a == UP));
     assert((state.buttons.a && lastState.buttons.a) == (a == HELD));
     assert((!state.buttons.a && lastState.buttons.a) == (a == RELEASED));
     assert((state.buttons.a && !lastState.buttons.a) == (a == PRESSED));
 
-    UPDATE_BUTTON_STATE(b);
-    UPDATE_BUTTON_STATE(x);
-    UPDATE_BUTTON_STATE(y);
+    UPDATE_BUTTON_STATE(b)
+    UPDATE_BUTTON_STATE(x)
+    UPDATE_BUTTON_STATE(y)
 
-    UPDATE_BUTTON_STATE(leftStick);
-    UPDATE_BUTTON_STATE(rightStick);
+    UPDATE_BUTTON_STATE(leftStick)
+    UPDATE_BUTTON_STATE(rightStick)
 
-    UPDATE_BUTTON_STATE(leftShoulder);
-    UPDATE_BUTTON_STATE(rightShoulder);
+    UPDATE_BUTTON_STATE(leftShoulder)
+    UPDATE_BUTTON_STATE(rightShoulder)
 
-    UPDATE_BUTTON_STATE(back);
-    UPDATE_BUTTON_STATE(start);
+    UPDATE_BUTTON_STATE(back)
+    UPDATE_BUTTON_STATE(start)
 
     dpadUp = static_cast<ButtonState>((!!state.dpad.up) | ((!!state.dpad.up ^ !!lastState.dpad.up) << 1));
     dpadDown = static_cast<ButtonState>((!!state.dpad.down) | ((!!state.dpad.down ^ !!lastState.dpad.down) << 1));

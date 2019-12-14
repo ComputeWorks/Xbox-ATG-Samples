@@ -293,6 +293,7 @@ This repo contains game development samples written by the Microsoft Xbox Advanc
   <td>Input</td>
   <td><a href="UWPSamples/System/InputInterfacingUWP">Interfacing UWP</a></td>
   <td><a href="UWPSamples/System/MouseCursor">Mouse UWP</a></td>
+  <td><a href="XDKSamples/System/MouseCursorXDK">Mouse XDK</a></td>
  </tr>
  <tr>
   <td>User Gamepad Pairing</td>
@@ -367,6 +368,7 @@ This repo contains game development samples written by the Microsoft Xbox Advanc
 <table>
  <tr>
   <td><a href="PCSamples/Raytracing/SimpleRaytracingTriangle_PC12">SimpleTriangle</a></td>
+  <td><a href="PCSamples/Raytracing/SimpleRaytracingInstancing_PC12">SimpleInstancing</a></td>
   <td><a href="PCSamples/Raytracing/RaytracingAO_PC12">Raytracing AO</a></td>
  </tr>
 </table>
@@ -375,7 +377,7 @@ This repo contains game development samples written by the Microsoft Xbox Advanc
 
 ## UWP apps
 * Windows 10 Anniversary Update (Version 1607) or later
-* Visual Studio 2017 ([15.8](https://blogs.msdn.microsoft.com/chuckw/2018/08/16/vs-2017-15-8-update/) or [15.9](https://blogs.msdn.microsoft.com/chuckw/2018/11/15/vs-2017-15-9-update/) update) with the *Universal Windows Platform development* workload, the *C++ Universal Windows Platform tools* component, and *Windows 10 SDK ([10.0.17763.0](https://blogs.msdn.microsoft.com/chuckw/2018/10/02/windows-10-october-2018-update/))*.
+* Visual Studio 2017 ([15.8](https://walbourn.github.io/vs-2017-15-8-update/) or [15.9](https://walbourn.github.io/vs-2017-15-9-update/) update) with the *Universal Windows Platform development* workload, the *C++ Universal Windows Platform tools* component, and *Windows 10 SDK ([10.0.17763.0](https://walbourn.github.io/windows-10-october-2018-update/))*.
 
 ## XDK apps
 * Xbox One Development Kit
@@ -392,8 +394,12 @@ This repo contains game development samples written by the Microsoft Xbox Advanc
 
 When compiling and running a sample, the file name of the sample executable will be sent to Microsoft to help track sample usage. To opt-out of this data collection, you can remove the block of code in ``Main.cpp`` labeled _Sample Usage Telemetry_.
 
-For more information about Microsoft's privacy policies in general, see the [Microsoft Privacy Statement](https://privacy.microsoft.com/en-us/privacystatement/).
+For more information about Microsoft's privacy policies in general, see the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement/).
 
 # Code of Conduct
 
 This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+
+# Other Samples
+
+For more ATG samples, see [DirectML-Samples](https://github.com/microsoft/DirectML-Samples), [PlayFab-Samples](https://github.com/PlayFab/PlayFab-Samples), and [Xbox-LIVE-Samples](https://github.com/microsoft/xbox-live-samples).

@@ -112,7 +112,7 @@ void MediaEnginePlayer::Initialize(ID3D11Device* device, DXGI_FORMAT format)
         D3D11CreateDevice(
         adapter.Get(),
         D3D_DRIVER_TYPE_UNKNOWN,
-        0,
+        nullptr,
         D3D11_CREATE_DEVICE_VIDEO_SUPPORT | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
         &fLevel,
         1,
@@ -239,10 +239,11 @@ bool MediaEnginePlayer::TransferFrame(ID3D11Texture2D* texture, MFVideoNormalize
             DX::ThrowIfFailed(dxgiTexture->GetSharedHandle(&textureHandle));
 
             ComPtr<ID3D11Texture2D> mediaTexture;
-            DX::ThrowIfFailed(m_device->OpenSharedResource(textureHandle, IID_PPV_ARGS(mediaTexture.GetAddressOf())));
-
-            if (m_mediaEngine->TransferVideoFrame(mediaTexture.Get(), &rect, &rcTarget, &m_bkgColor) == S_OK)
-                return true;
+            if (SUCCEEDED(m_device->OpenSharedResource(textureHandle, IID_PPV_ARGS(mediaTexture.GetAddressOf()))))
+            {
+                if (m_mediaEngine->TransferVideoFrame(mediaTexture.Get(), &rect, &rcTarget, &m_bkgColor) == S_OK)
+                    return true;
+            }
         }
     }
 

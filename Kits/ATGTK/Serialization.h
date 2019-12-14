@@ -127,18 +127,18 @@ namespace ATG
     };
 
     SPECIALIZE_SELECT_GET_BUFFER(int8_t)
-        SPECIALIZE_SELECT_GET_BUFFER(uint8_t)
-        SPECIALIZE_SELECT_GET_BUFFER(int16_t)
-        SPECIALIZE_SELECT_GET_BUFFER(uint16_t)
-        SPECIALIZE_SELECT_GET_BUFFER(int32_t)
-        SPECIALIZE_SELECT_GET_BUFFER(uint32_t)
-        SPECIALIZE_SELECT_GET_BUFFER(int64_t)
-        SPECIALIZE_SELECT_GET_BUFFER(uint64_t)
-        SPECIALIZE_SELECT_GET_BUFFER(wchar_t)
-        SPECIALIZE_SELECT_GET_BUFFER(char)
+    SPECIALIZE_SELECT_GET_BUFFER(uint8_t)
+    SPECIALIZE_SELECT_GET_BUFFER(int16_t)
+    SPECIALIZE_SELECT_GET_BUFFER(uint16_t)
+    SPECIALIZE_SELECT_GET_BUFFER(int32_t)
+    SPECIALIZE_SELECT_GET_BUFFER(uint32_t)
+    SPECIALIZE_SELECT_GET_BUFFER(int64_t)
+    SPECIALIZE_SELECT_GET_BUFFER(uint64_t)
+    SPECIALIZE_SELECT_GET_BUFFER(wchar_t)
+    SPECIALIZE_SELECT_GET_BUFFER(char)
 #undef SPECIALIZE_SELECT_GET_BUFFER
 
-        template<typename EltType>
+    template<typename EltType>
     using IGetBuffer_t = typename SelectIGetBufferBase<EltType>::BaseType;
 
     class IVisitor
@@ -186,16 +186,16 @@ namespace ATG
         void VisitPrimitiveElement(wchar_t &elt) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveElement(elt); }
         void VisitPrimitiveElement(char &elt) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveElement(elt); }
 
-        void VisitPrimitiveCollection(IGetBuffer_t<   int8_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection<   int8_t>(getBuffer); }
-        void VisitPrimitiveCollection(IGetBuffer_t<  uint8_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection<  uint8_t>(getBuffer); }
-        void VisitPrimitiveCollection(IGetBuffer_t<  int16_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection<  int16_t>(getBuffer); }
-        void VisitPrimitiveCollection(IGetBuffer_t< uint16_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection< uint16_t>(getBuffer); }
-        void VisitPrimitiveCollection(IGetBuffer_t<  int32_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection<  int32_t>(getBuffer); }
-        void VisitPrimitiveCollection(IGetBuffer_t< uint32_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection< uint32_t>(getBuffer); }
-        void VisitPrimitiveCollection(IGetBuffer_t<  int64_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection<  int64_t>(getBuffer); }
-        void VisitPrimitiveCollection(IGetBuffer_t< uint64_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection< uint64_t>(getBuffer); }
-        void VisitPrimitiveCollection(IGetBuffer_t<  wchar_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection<  wchar_t>(getBuffer); }
-        void VisitPrimitiveCollection(IGetBuffer_t<     char> &getBuffer) override { static_cast<VisitorTemplates*>(this)->ImplementVisitPrimitiveCollection<     char>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t<   int8_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection<   int8_t>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t<  uint8_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection<  uint8_t>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t<  int16_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection<  int16_t>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t< uint16_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection< uint16_t>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t<  int32_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection<  int32_t>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t< uint32_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection< uint32_t>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t<  int64_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection<  int64_t>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t< uint64_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection< uint64_t>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t<  wchar_t> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection<  wchar_t>(getBuffer); }
+        void VisitPrimitiveCollection(IGetBuffer_t<     char> &getBuffer) override { static_cast<VisitorTemplates*>(this)->template ImplementVisitPrimitiveCollection<     char>(getBuffer); }
 
         void VisitElement(class VisitorContext &ctx) override
         {
@@ -264,7 +264,7 @@ namespace ATG
             if (!cached)
             {
                 cached = new ClassVisitorActions<T>;
-                *cached = CreateClassVisitor<T>();
+                *cached = T::CreateClassVisitor();
                 m_cleanupActions.emplace_back(new VisitorActionsHolder<ClassVisitorActions<T>>(&cached));
             }
             return *cached;
@@ -500,7 +500,7 @@ namespace ATG
 
             void Execute(ResolvedActionContext &) override
             {
-                m_continuation(result);
+                m_continuation(m_result);
             }
 
             T &GetResult() const
@@ -780,7 +780,7 @@ namespace ATG
                 static_cast<const HasVisitActions*>(this)->VisitAction(inst, ctx);
             }
 
-            void ConstVisitAction(const T &inst, ConstVisitorContext &ctx) const
+            void ConstVisitAction(const T &inst, ConstVisitorContext &ctx) const override
             {
                 static_cast<const HasVisitActions*>(this)->ConstVisitAction(inst, ctx);
             }
@@ -899,7 +899,7 @@ namespace ATG
     template<typename ClassType, typename ConstVisitorCallable, typename VisitorCallable>
     void VisitDirect(ClassVisitorActions<ClassType> &actions, ConstVisitorCallable constVisitorCallable, VisitorCallable visitorCallable)
     {
-        actions.AddVisitorAction<VisitDirectActions<ClassType, ConstVisitorCallable, VisitorCallable>>(constVisitorCallable, visitorCallable);
+        actions.template AddVisitorAction<VisitDirectActions<ClassType, ConstVisitorCallable, VisitorCallable>>(constVisitorCallable, visitorCallable);
     }
 
     // Visit a class member
@@ -935,7 +935,7 @@ namespace ATG
     template<typename ClassType, typename MmbrType>
     void VisitMember(ClassVisitorActions<ClassType> &actions, MmbrType ClassType::*mbr)
     {
-        actions.AddVisitorAction<VisitMemberAction<ClassType, MmbrType>>(mbr);
+        actions.template AddVisitorAction<VisitMemberAction<ClassType, MmbrType>>(mbr);
     }
 
     // Visit a collection of elements that is pointed to by a unique_ptr
@@ -989,7 +989,7 @@ namespace ATG
     template<typename ClassType, typename EltType, typename CountType>
     void VisitUniquePointerCollection(ClassVisitorActions<ClassType> &actions, std::unique_ptr<EltType> ClassType::*UPP, CountType ClassType::*count)
     {
-        actions.AddVisitorAction<VisitUniquePointerCollectionAction<ClassType, EltType, CountType>>(UPP, count);
+        actions.template AddVisitorAction<VisitUniquePointerCollectionAction<ClassType, EltType, CountType>>(UPP, count);
     }
 
     // Visit one or zero elements pointed to by a unique_ptr
@@ -1008,12 +1008,12 @@ namespace ATG
         {
         }
 
-        void VisitAction(ClassType &inst, VisitorContext &ctx) const
+        void VisitAction(ClassType &inst, VisitorContext &ctx) const override
         {
             VisitorAdapter(ctx).VisitCollection<ClassType, EltType>(inst, *this);
         }
 
-        void ConstVisitAction(const ClassType &inst, ConstVisitorContext & ctx) const
+        void ConstVisitAction(const ClassType &inst, ConstVisitorContext & ctx) const override
         {
             ConstVisitorAdapter(ctx).VisitCollection<ClassType, EltType>(inst, *this);
         }
@@ -1099,7 +1099,7 @@ namespace ATG
     template<typename ClassType, typename EltType>
     void VisitVectorCollection(ClassVisitorActions<ClassType> &actions, std::vector<EltType> ClassType::*VecP)
     {
-        actions.AddVisitorAction<VisitVectorCollectionAction<ClassType, EltType>>(VecP);
+        actions.template AddVisitorAction<VisitVectorCollectionAction<ClassType, EltType>>(VecP);
     }
 
     // Visit a collection of chars contained in a std::string
@@ -1148,7 +1148,7 @@ namespace ATG
     template<typename ClassType>
     void VisitString(ClassVisitorActions<ClassType> &actions, std::string ClassType::*StrP)
     {
-        actions.AddVisitorAction<VisitStringAction<ClassType>>(StrP);
+        actions.template AddVisitorAction<VisitStringAction<ClassType>>(StrP);
     }
 
     // Visit a collection of elements using functions to get and set the collection elements
@@ -1177,12 +1177,12 @@ namespace ATG
             , m_eltsSetter(eltsSetter)
         {}
 
-        void VisitAction(ClassType &inst, VisitorContext &ctx) const
+        void VisitAction(ClassType &inst, VisitorContext &ctx) const override
         {
             VisitorAdapter(ctx).VisitCollection<ClassType, EltType>(inst, m_eltsSetter);
         }
 
-        void ConstVisitAction(const ClassType &inst, ConstVisitorContext &ctx) const
+        void ConstVisitAction(const ClassType &inst, ConstVisitorContext &ctx) const override
         {
             ConstVisitorAdapter(ctx).VisitCollection<ClassType, EltType>(inst, m_constEltsGetter);
         }
@@ -1237,7 +1237,7 @@ namespace ATG
     template<typename ClassType, typename EltType, typename GetActionType, typename SetActionType>
     void VisitGetterSetter(ClassVisitorActions<ClassType> &actions, GetActionType getter, SetActionType setter)
     {
-        actions.AddVisitorAction<VisitGetterSetterAction<ClassType, EltType, GetActionType, SetActionType>>(getter, setter);
+        actions.template AddVisitorAction<VisitGetterSetterAction<ClassType, EltType, GetActionType, SetActionType>>(getter, setter);
     }
 
     // Template function to create a class visitor for your class
@@ -1326,8 +1326,8 @@ namespace ATG
     {
     public:
         VectorSerializationBuffer(std::vector<uint8_t> &buffer)
-            : m_buffer(buffer)
-            , m_bytesWritten(0)
+            : m_bytesWritten(0)
+            , m_buffer(buffer)
         {
         }
 

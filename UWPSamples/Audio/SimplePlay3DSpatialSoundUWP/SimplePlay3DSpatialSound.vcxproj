@@ -27,7 +27,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{7c44d58b-2263-4a61-b9ca-2c8777c34f3a}</ProjectGuid>
+    <ProjectGuid>{6ac6a976-9611-4a4f-9bbb-6480bb63732c}</ProjectGuid>
     <Keyword>DirectXApp</Keyword>
     <RootNamespace>SimplePlaySpatialSound</RootNamespace>
     <DefaultLanguage>en-US</DefaultLanguage>
@@ -266,7 +266,7 @@
     <Image Include="Assets\WideLogo.png" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Kits\DirectXTK\DirectXTK_Windows10.vcxproj">
+    <ProjectReference Include="..\..\..\Kits\DirectXTK\DirectXTK_Windows10_2017.vcxproj">
       <Project>{f4776924-619c-42c7-88b2-82c947ccc9e7}</Project>
     </ProjectReference>
   </ItemGroup>

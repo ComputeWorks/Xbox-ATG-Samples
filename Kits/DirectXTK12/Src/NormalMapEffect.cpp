@@ -195,13 +195,13 @@ const int EffectBase<NormalMapEffectTraits>::PixelShaderIndices[] =
 
 // Global pool of per-device NormalMapEffect resources.
 template<>
-SharedResourcePool<ID3D12Device*, EffectBase<NormalMapEffectTraits>::DeviceResources> EffectBase<NormalMapEffectTraits>::deviceResourcesPool;
+SharedResourcePool<ID3D12Device*, EffectBase<NormalMapEffectTraits>::DeviceResources> EffectBase<NormalMapEffectTraits>::deviceResourcesPool = {};
 
 
 // Constructor.
-NormalMapEffect::Impl::Impl(_In_ ID3D12Device* device, int effectFlags, const EffectPipelineStateDescription& pipelineDescription, bool specularMap)
+NormalMapEffect::Impl::Impl(_In_ ID3D12Device* device, int effectFlags, const EffectPipelineStateDescription& pipelineDescription, bool ispecularMap)
     : EffectBase(device),
-    specularMap(specularMap),
+    specularMap(ispecularMap),
     texture{},
     specular{},
     normal{},
@@ -573,5 +573,10 @@ void NormalMapEffect::SetNormalTexture(D3D12_GPU_DESCRIPTOR_HANDLE srvDescriptor
 
 void NormalMapEffect::SetSpecularTexture(D3D12_GPU_DESCRIPTOR_HANDLE srvDescriptor)
 {
+    if (!pImpl->specularMap)
+    {
+        DebugTrace("WARNING: Specular texture set on NormalMapEffect instance created without specular shader (texture %llu)\n", srvDescriptor.ptr);
+    }
+
     pImpl->specular = srvDescriptor;
 }

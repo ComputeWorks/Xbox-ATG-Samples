@@ -31,7 +31,7 @@ public:
         , mUseNormalMapEffect(true)
         , mEnablePerPixelLighting(true)
         , mEnableFog(false)
-        , device(device)
+        , mDevice(device)
         , mSharing(true)
     { 
         if (textureDescriptors)
@@ -59,7 +59,7 @@ public:
     bool mEnableFog;
 
 private:
-    ID3D12Device*                  device;
+    ComPtr<ID3D12Device> mDevice;
 
     typedef std::map< std::wstring, std::shared_ptr<IEffect> > EffectCache;
 
@@ -83,13 +83,13 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
     int samplerDescriptorOffset)
 {
     // If textures are required, make sure we have a descriptor heap
-    if (mTextureDescriptors == nullptr && (info.diffuseTextureIndex != -1 || info.specularTextureIndex != -1 || info.normalTextureIndex != -1))
+    if (!mTextureDescriptors && (info.diffuseTextureIndex != -1 || info.specularTextureIndex != -1 || info.normalTextureIndex != -1 || info.emissiveTextureIndex != -1))
     {
-        DebugTrace("ERROR: EffectFactory created without texture descriptor heap with texture index set (diffuse %d, specular %d, normal %d)!\n",
-            info.diffuseTextureIndex, info.specularTextureIndex, info.normalTextureIndex);
+        DebugTrace("ERROR: EffectFactory created without texture descriptor heap with texture index set (diffuse %d, specular %d, normal %d, emissive %d)!\n",
+            info.diffuseTextureIndex, info.specularTextureIndex, info.normalTextureIndex, info.emissiveTextureIndex);
         throw std::exception("EffectFactory");
     }
-    if (mSamplerDescriptors == nullptr && (info.samplerIndex != -1 || info.samplerIndex2 != -1))
+    if (!mSamplerDescriptors && (info.samplerIndex != -1 || info.samplerIndex2 != -1))
     {
         DebugTrace("ERROR: EffectFactory created without sampler descriptor heap with sampler index set (samplerIndex %d, samplerIndex2 %d)!\n",
             info.samplerIndex, info.samplerIndex2);
@@ -112,6 +112,7 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
 
     int diffuseTextureIndex = (info.diffuseTextureIndex != -1 && mTextureDescriptors != nullptr) ? info.diffuseTextureIndex + textureDescriptorOffset : -1;
     int specularTextureIndex = (info.specularTextureIndex != -1 && mTextureDescriptors != nullptr) ? info.specularTextureIndex + textureDescriptorOffset : -1;
+    int emissiveTextureIndex = (info.emissiveTextureIndex != -1 && mTextureDescriptors != nullptr) ? info.emissiveTextureIndex + textureDescriptorOffset : -1;
     int normalTextureIndex = (info.normalTextureIndex != -1 && mTextureDescriptors != nullptr) ? info.normalTextureIndex + textureDescriptorOffset : -1;
     int samplerIndex = (info.samplerIndex != -1 && mSamplerDescriptors != nullptr) ? info.samplerIndex + samplerDescriptorOffset : -1;
     int samplerIndex2 = (info.samplerIndex2 != -1 && mSamplerDescriptors != nullptr) ? info.samplerIndex2 + samplerDescriptorOffset : -1;
@@ -148,7 +149,7 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
             }
         }
 
-        std::shared_ptr<SkinnedEffect> effect = std::make_shared<SkinnedEffect>(device, effectflags, derivedPSD);
+        auto effect = std::make_shared<SkinnedEffect>(mDevice.Get(), effectflags, derivedPSD);
 
         effect->EnableDefaultLighting();
 
@@ -179,8 +180,8 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
         if (diffuseTextureIndex != -1)
         {
             effect->SetTexture(
-                mTextureDescriptors->GetGpuHandle(diffuseTextureIndex),
-                mSamplerDescriptors->GetGpuHandle(samplerIndex));
+                mTextureDescriptors->GetGpuHandle(static_cast<size_t>(diffuseTextureIndex)),
+                mSamplerDescriptors->GetGpuHandle(static_cast<size_t>(samplerIndex)));
         }
 
         if (mSharing && !info.name.empty())
@@ -190,7 +191,7 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
             mEffectCacheSkinning.insert(v);
         }
 
-        return effect;
+        return std::move(effect);
     }
     else if (info.enableDualTexture)
     {
@@ -219,7 +220,7 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
             effectflags |= EffectFlags::VertexColor;
         }
 
-        std::shared_ptr<DualTextureEffect> effect = std::make_shared<DualTextureEffect>(device, effectflags, derivedPSD);
+        auto effect = std::make_shared<DualTextureEffect>(mDevice.Get(), effectflags, derivedPSD);
 
         // Dual texture effect doesn't support lighting (usually it's lightmaps)
         effect->SetAlpha(info.alphaValue);
@@ -230,12 +231,25 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
         if (diffuseTextureIndex != -1)
         {
             effect->SetTexture(
-                mTextureDescriptors->GetGpuHandle(diffuseTextureIndex),
-                mSamplerDescriptors->GetGpuHandle(samplerIndex));
+                mTextureDescriptors->GetGpuHandle(static_cast<size_t>(diffuseTextureIndex)),
+                mSamplerDescriptors->GetGpuHandle(static_cast<size_t>(samplerIndex)));
         }
 
-        if (specularTextureIndex != -1)
+        if (emissiveTextureIndex != -1)
         {
+            if (samplerIndex2 == -1)
+            {
+                DebugTrace("ERROR: Dual-texture requires a second sampler (emissive %d)\n", emissiveTextureIndex);
+                throw std::exception("EffectFactory");
+            }
+
+            effect->SetTexture2(
+                mTextureDescriptors->GetGpuHandle(static_cast<size_t>(emissiveTextureIndex)),
+                mSamplerDescriptors->GetGpuHandle(static_cast<size_t>(samplerIndex2)));
+        }
+        else if (specularTextureIndex != -1)
+        {
+            // If there's no emissive texture specified, use the specular texture as the second texture
             if (samplerIndex2 == -1)
             {
                 DebugTrace("ERROR: Dual-texture requires a second sampler (specular %d)\n", specularTextureIndex);
@@ -243,8 +257,8 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
             }
 
             effect->SetTexture2(
-                mTextureDescriptors->GetGpuHandle(specularTextureIndex),
-                mSamplerDescriptors->GetGpuHandle(samplerIndex2));
+                mTextureDescriptors->GetGpuHandle(static_cast<size_t>(specularTextureIndex)),
+                mSamplerDescriptors->GetGpuHandle(static_cast<size_t>(samplerIndex2)));
         }
 
         if (mSharing && !info.name.empty())
@@ -254,7 +268,7 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
             mEffectCacheDualTexture.insert(v);
         }
 
-        return effect;
+        return std::move(effect);
     }
     else if (info.enableNormalMaps && mUseNormalMapEffect)
     {
@@ -290,7 +304,7 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
             }
         }
 
-        std::shared_ptr<NormalMapEffect> effect = std::make_shared<NormalMapEffect>(device, effectflags, derivedPSD, (specularTextureIndex != -1));
+        auto effect = std::make_shared<NormalMapEffect>(mDevice.Get(), effectflags, derivedPSD, (specularTextureIndex != -1));
 
         effect->EnableDefaultLighting();
 
@@ -321,18 +335,18 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
         if (diffuseTextureIndex != -1)
         {
             effect->SetTexture(
-                mTextureDescriptors->GetGpuHandle(diffuseTextureIndex),
-                mSamplerDescriptors->GetGpuHandle(samplerIndex));
+                mTextureDescriptors->GetGpuHandle(static_cast<size_t>(diffuseTextureIndex)),
+                mSamplerDescriptors->GetGpuHandle(static_cast<size_t>(samplerIndex)));
         }
 
         if (specularTextureIndex != -1)
         {
-            effect->SetSpecularTexture(mTextureDescriptors->GetGpuHandle(specularTextureIndex));
+            effect->SetSpecularTexture(mTextureDescriptors->GetGpuHandle(static_cast<size_t>(specularTextureIndex)));
         }
 
         if (normalTextureIndex != -1)
         {
-            effect->SetNormalTexture(mTextureDescriptors->GetGpuHandle(normalTextureIndex));
+            effect->SetNormalTexture(mTextureDescriptors->GetGpuHandle(static_cast<size_t>(normalTextureIndex)));
         }
 
         if (mSharing && !info.name.empty())
@@ -342,7 +356,7 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
             mEffectCacheNormalMap.insert(v);
         }
 
-        return effect;
+        return std::move(effect);
     }
     else
     {
@@ -382,7 +396,7 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
             }
         }
 
-        std::shared_ptr<BasicEffect> effect = std::make_shared<BasicEffect>(device, effectflags, derivedPSD);
+        auto effect = std::make_shared<BasicEffect>(mDevice.Get(), effectflags, derivedPSD);
 
         effect->EnableDefaultLighting();
 
@@ -412,8 +426,8 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
         if (diffuseTextureIndex != -1)
         {
             effect->SetTexture(
-                mTextureDescriptors->GetGpuHandle(diffuseTextureIndex),
-                mSamplerDescriptors->GetGpuHandle(samplerIndex));
+                mTextureDescriptors->GetGpuHandle(static_cast<size_t>(diffuseTextureIndex)),
+                mSamplerDescriptors->GetGpuHandle(static_cast<size_t>(samplerIndex)));
         }
 
         if (mSharing && !info.name.empty())
@@ -423,7 +437,7 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(
             mEffectCache.insert(v);
         }
 
-        return effect;
+        return std::move(effect);
     }
 }
 
@@ -449,11 +463,11 @@ EffectFactory::EffectFactory(_In_ ID3D12Device* device)
 
 EffectFactory::EffectFactory(_In_ ID3D12DescriptorHeap* textureDescriptors, _In_ ID3D12DescriptorHeap* samplerDescriptors)
 {
-    if (textureDescriptors == nullptr)
+    if (!textureDescriptors)
     {
         throw std::exception("Texture descriptor heap cannot be null if no device is provided. Use the alternative EffectFactory constructor instead.");
     }
-    if (samplerDescriptors == nullptr)
+    if (!samplerDescriptors)
     {
         throw std::exception("Descriptor heap cannot be null if no device is provided. Use the alternative EffectFactory constructor instead.");
     }

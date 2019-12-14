@@ -4,16 +4,16 @@ DirectXTK - the DirectX Tool Kit for DirectX 12
 
 Copyright (c) Microsoft Corporation. All rights reserved.
 
-November 16, 2018
+October 17, 2019
 
 This package contains the "DirectX Tool Kit", a collection of helper classes for
 writing Direct3D 12 C++ code for Universal Windows Platform (UWP) apps, Win32
 desktop applications for Windows 10, and Xbox One.
 
-This code is designed to build with Visual Studio 2015 Update 3 or Visual Studio 2017.
-It is recommended that you make use of VS 2015 Update 3, Windows Tools 1.4.1, and the
-Windows 10 Anniversary Update SDK (14393) -or- VS 2017 (15.9 update) with the
-Windows 10 October 2018 Update SDK (17763).
+This code is designed to build with Visual Studio 2015 Update 3, Visual Studio 2017,
+or Visual Studio 2019. It is recommended that you make use of VS 2015 Update 3,
+Windows Tools 1.4.1, and the Windows 10 Anniversary Update SDK (14393) -or-
+VS 2017 (15.9 update) / VS 2019 with the Windows 10 October 2018 Update SDK (17763).
 
 Inc\
     Public Header Files (in the DirectX C++ namespace):
@@ -105,7 +105,7 @@ COMPARISONS TO DIRECTX 11 VERSION
 RELEASE NOTES
 -------------
 
-* The VS 2017 projects make use of /permissive- for improved C++ standard
+* The VS 2017/2019 projects make use of /permissive- for improved C++ standard
   conformance. Use of a Windows 10 SDK prior to the Fall Creators Update (16299)
   or an Xbox One XDK prior to June 2017 QFE 4 may result in failures due to
   problems with the system headers. You can work around these by disabling this
@@ -121,12 +121,49 @@ RELEASE NOTES
   can edit the project files <AdditionalOptions> elements.
 
 * The UWP projects include configurations for the ARM64 platform. These require
-  VS 2017 (15.9 update) to build.
+  VS 2017 (15.9 update) or VS 2019 to build.
 
 
 ---------------
 RELEASE HISTORY
 ---------------
+
+October 17, 2019
+    Added optional forceSRGB parameter to SaveWICTextureToFile
+    GamePad updated to report VID/PID (when supported)
+    Minor code cleanup
+
+August 21, 2019
+    Updated D3DX12 internal copy to latest version
+    Code cleanup
+
+June 30, 2019
+    Clang/LLVM warning cleanup
+    Renamed DirectXTK_Windows10.vcxproj to _Windows10_2017.vcxproj
+    Added VS 2019 UWP project
+
+May 30, 2019
+    PBREffect updated with additional set methods
+    Additional debugging output for GraphicsMemory in error cases
+    Added CMake project files
+    Code cleanup
+
+April 26, 2019
+    Updated auto-generated mipmaps support to make it more robust
+    Added optional LoadStaticBuffers method for GeometricPrimitive
+    Added VS 2019 desktop projects
+    Fixed guards w.r.t. to windows.h usage in Keyboard/Mouse headers
+    Added C++/WinRT SetWindow helper to Keyboard/Mouse
+    Update HLSL script to use Shader Model 5.1 instead of 5.0
+    Code cleanup
+
+February 7, 2019
+    Model now supports loading SDKMESH v2 models
+    PBREffectFactory added to support PBR materials
+    PBREffect and NormalMapEffect shaders updated to support BC5_UNORM compressed normal maps
+    SpriteFont: DrawString overloads for UTF-8 chars in addition to UTF-16LE wide chars
+    Fixed bug with GraphicsMemory dtor introduced with mGPU handling
+    Made library agonstic to legacy Windows SDK pix.h vs. latest pix3.h from NuGet
 
 November 16, 2018
     VS 2017 updated for Windows 10 October 2018 Update SDK (17763)

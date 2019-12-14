@@ -103,8 +103,8 @@ void CPUTimer::Update()
 {
     for (uint32_t j = 0; j < c_maxTimers; ++j)
     {
-        uint64_t start = m_start[j].QuadPart;
-        uint64_t end = m_end[j].QuadPart;
+        auto start = static_cast<uint64_t>(m_start[j].QuadPart);
+        auto end = static_cast<uint64_t>(m_end[j].QuadPart);
 
         DebugWarnings(j, start, end);
 
@@ -123,8 +123,8 @@ double CPUTimer::GetElapsedMS(uint32_t timerid) const
     if (timerid >= c_maxTimers)
         return 0.0;
 
-    uint64_t start = m_start[timerid].QuadPart;
-    uint64_t end = m_end[timerid].QuadPart;
+    auto start = static_cast<uint64_t>(m_start[timerid].QuadPart);
+    auto end = static_cast<uint64_t>(m_end[timerid].QuadPart);
 
     return double(end - start) * m_qpfFreqInv;
 }
@@ -141,27 +141,26 @@ public:
         m_size(size), 
         m_index(0)
     {
-        m_memory = (t_Type*)VirtualAlloc(nullptr,
+        m_memory = static_cast<t_Type*>(VirtualAlloc(nullptr,
             size,
             MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES | MEM_GRAPHICS,
-            PAGE_READWRITE | PAGE_WRITECOMBINE);
+            PAGE_READWRITE | PAGE_WRITECOMBINE));
 
         if (!m_memory)
         {
-            DX::ThrowIfFailed(GetLastError());
+            DX::ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
         }
 
         memset(m_memory, 0, size);
     }
 
-    virtual ~TimestampAllocator()
+    virtual ~TimestampAllocator() noexcept
     {
-        if (!VirtualFree(m_memory, m_size, MEM_RELEASE))
+        if (m_memory)
         {
-            DX::ThrowIfFailed(GetLastError());
+            (void)VirtualFree(m_memory, m_size, MEM_RELEASE);
+            m_memory = nullptr;
         }
-
-        m_memory = nullptr;
     }
 
     t_Type* GetNext()
@@ -281,13 +280,13 @@ void GPUCommandListTimer<t_CommandList>::RestoreDevice(_In_ ID3D12Device* /*devi
     // Dma context requires 32-byte alignment for writebacks
     static const uint32_t dmaWritebackAlignment = 32;
     static const uint32_t alignmentPadding = dmaWritebackAlignment / sizeof(Timestamp);
-    typedef __declspec(align(dmaWritebackAlignment)) uint64_t PaddedTimestamp[alignmentPadding];
+    typedef uint64_t PaddedTimestamp[alignmentPadding];
 
     // One large page supports a total of 2048 timestamps, which is enough for 85 timers
     const uint32_t largePageSize = 64 * 1024;
 
     // Allocate Timestamp memory --- a single page shared among all timers of this type
-    static TimestampAllocator<PaddedTimestamp> Allocator(largePageSize);
+    static __declspec(align(dmaWritebackAlignment)) TimestampAllocator<PaddedTimestamp> Allocator(largePageSize);
 
     for (size_t i = 0; i < c_bufferCount; ++i)
     {
@@ -394,9 +393,12 @@ void GPUCommandListTimer<t_CommandList>::Frame::Stop(_In_ t_CommandList* command
 }
 
 // Force compilation of these template instantiations
-template class GPUCommandListTimer<ID3D12GraphicsCommandList>;
-template class GPUCommandListTimer<ID3D12XboxDmaCommandList>;
-template class GPUCommandListTimer<ID3D12GraphicsCommandList>;
+namespace DX
+{
+    template class GPUCommandListTimer<ID3D12GraphicsCommandList>;
+    template class GPUCommandListTimer<ID3D12XboxDmaCommandList>;
+    template class GPUCommandListTimer<ID3D12GraphicsCommandList>;
+}
 
 
 //======================================================================================
@@ -607,9 +609,12 @@ void GPUContextTimer<t_Context>::Frame::Stop(_In_ t_Context* context, uint32_t t
 }
 
 // Force compilation of these template instantiations
-template class GPUContextTimer<ID3D11DeviceContextX>;
-template class GPUContextTimer<ID3D11DmaEngineContextX>;
-template class GPUContextTimer<ID3D11ComputeContextX>;
+namespace DX
+{
+    template class GPUContextTimer<ID3D11DeviceContextX>;
+    template class GPUContextTimer<ID3D11DmaEngineContextX>;
+    template class GPUContextTimer<ID3D11ComputeContextX>;
+}
 
 #else
 #error Must include d3d11*.h or d3d12*.h in pch.h

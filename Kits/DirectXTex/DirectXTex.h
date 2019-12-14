@@ -20,17 +20,16 @@
 #if !defined(__d3d11_h__) && !defined(__d3d11_x_h__) && !defined(__d3d12_h__) && !defined(__d3d12_x_h__)
 #if defined(_XBOX_ONE) && defined(_TITLE)
 #include <d3d11_x.h>
-#define DCOMMON_H_INCLUDED
 #else
 #include <d3d11_1.h>
 #endif
 #endif
 
-#include <directxmath.h>
+#include <DirectXMath.h>
 
-#include <ocidl.h>
+#include <OCIdl.h>
 
-#define DIRECTX_TEX_VERSION 161
+#define DIRECTX_TEX_VERSION 162
 
 struct IWICImagingFactory;
 struct IWICMetadataQueryReader;
@@ -132,7 +131,7 @@ namespace DirectX
             // Helper for miscFlags
 
         bool __cdecl IsPMAlpha() const { return ((miscFlags2 & TEX_MISC2_ALPHA_MODE_MASK) == TEX_ALPHA_MODE_PREMULTIPLIED) != 0; }
-        void __cdecl SetAlphaMode(TEX_ALPHA_MODE mode) { miscFlags2 = (miscFlags2 & ~TEX_MISC2_ALPHA_MODE_MASK) | static_cast<uint32_t>(mode); }
+        void __cdecl SetAlphaMode(TEX_ALPHA_MODE mode) { miscFlags2 = (miscFlags2 & ~static_cast<uint32_t>(TEX_MISC2_ALPHA_MODE_MASK)) | static_cast<uint32_t>(mode); }
         TEX_ALPHA_MODE __cdecl GetAlphaMode() const { return static_cast<TEX_ALPHA_MODE>(miscFlags2 & TEX_MISC2_ALPHA_MODE_MASK); }
             // Helpers for miscFlags2
 
@@ -193,6 +192,12 @@ namespace DirectX
 
         WIC_FLAGS_IGNORE_SRGB           = 0x20,
             // Ignores sRGB metadata if present in the file
+
+        WIC_FLAGS_FORCE_SRGB            = 0x40,
+            // Writes sRGB metadata into the file reguardless of format
+
+        WIC_FLAGS_FORCE_LINEAR          = 0x80,
+            // Writes linear gamma metadata into the file reguardless of format
 
         WIC_FLAGS_DITHER                = 0x10000,
             // Use ordered 4x4 dithering for any required conversions
@@ -377,8 +382,8 @@ namespace DirectX
         _In_z_ const wchar_t* szFile,
         _Out_opt_ TexMetadata* metadata, _Out_ ScratchImage& image);
 
-    HRESULT __cdecl SaveToTGAMemory(_In_ const Image& image, _Out_ Blob& blob);
-    HRESULT __cdecl SaveToTGAFile(_In_ const Image& image, _In_z_ const wchar_t* szFile);
+    HRESULT __cdecl SaveToTGAMemory(_In_ const Image& image, _Out_ Blob& blob, _In_opt_ const TexMetadata* metadata = nullptr);
+    HRESULT __cdecl SaveToTGAFile(_In_ const Image& image, _In_z_ const wchar_t* szFile, _In_opt_ const TexMetadata* metadata = nullptr);
 
     // WIC operations
     HRESULT __cdecl LoadFromWICMemory(
@@ -527,6 +532,11 @@ namespace DirectX
         _In_ DWORD filter, _In_ size_t levels, _Out_ ScratchImage& mipChain);
         // levels of '0' indicates a full mipchain, otherwise is generates that number of total levels (including the source base image)
         // Defaults to Fant filtering which is equivalent to a box filter
+
+    HRESULT __cdecl ScaleMipMapsAlphaForCoverage(
+        _In_reads_(nimages) const Image* srcImages, _In_ size_t nimages, _In_ const TexMetadata& metadata, _In_ size_t item,
+        _In_ float alphaReference, _Inout_ ScratchImage& mipChain);
+
 
     enum TEX_PMALPHA_FLAGS
     {

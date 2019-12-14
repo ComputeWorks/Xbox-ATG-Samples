@@ -329,7 +329,7 @@ void Sample::Render()
             LARGE_INTEGER li;
             li.QuadPart = _wtoi64(versionInfo->DeviceFamilyVersion->Data());
 
-            wchar_t buff[16] = {};
+            wchar_t buff[128] = {};
             swprintf_s(buff, L"%u.%u.%u.%u", HIWORD(li.HighPart), LOWORD(li.HighPart), HIWORD(li.LowPart), LOWORD(li.LowPart));
             y += DrawStringRight(m_batch.get(), m_smallFont.get(), buff, right, y, m_scale);
         }
@@ -1008,6 +1008,7 @@ void Sample::Render()
 
                 // Determine maximum shader model / root signature
                 D3D12_FEATURE_DATA_ROOT_SIGNATURE rootSig = {};
+                rootSig.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
                 if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &rootSig, sizeof(rootSig))))
                 {
                     rootSig.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
@@ -1021,7 +1022,22 @@ void Sample::Render()
                 }
 
                 D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = {};
-                if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel))))
+                #if defined(NTDDI_WIN10_19H1) && (NTDDI_VERSION >= NTDDI_WIN10_19H1)
+                shaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_5;
+                #elif defined(NTDDI_WIN10_RS5) && (NTDDI_VERSION >= NTDDI_WIN10_RS5)
+                shaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_4;
+                #elif defined(NTDDI_WIN10_RS4) && (NTDDI_VERSION >= NTDDI_WIN10_RS4)
+                shaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_2;
+                #else
+                shaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_0;
+                #endif
+                HRESULT hr = device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel));
+                while (hr == E_INVALIDARG && shaderModel.HighestShaderModel > D3D_SHADER_MODEL_6_0)
+                {
+                    shaderModel.HighestShaderModel = static_cast<D3D_SHADER_MODEL>(static_cast<int>(shaderModel.HighestShaderModel) - 1);
+                    hr = device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel));
+                }
+                if (FAILED(hr))
                 {
                     shaderModel.HighestShaderModel = D3D_SHADER_MODEL_5_1;
                 }
@@ -1044,9 +1060,13 @@ void Sample::Render()
                 case D3D_SHADER_MODEL_6_3: shaderModelVer = L"6.3"; break;
                 case D3D_SHADER_MODEL_6_4: shaderModelVer = L"6.4"; break;
                 #endif
+
+                #if defined(NTDDI_WIN10_19H1) && (NTDDI_VERSION >= NTDDI_WIN10_19H1)
+                case D3D_SHADER_MODEL_6_5: shaderModelVer = L"6.5"; break;
+                #endif
                 }
 
-                wchar_t buff[64] = {};
+                wchar_t buff[128] = {};
                 swprintf_s(buff, L"%ls / %ls", shaderModelVer, rootSigVer);
                 DrawStringLeft(m_batch.get(), m_smallFont.get(), L"Shader Model / Root Signature", left, y, m_scale);
                 y += DrawStringRight(m_batch.get(), m_smallFont.get(), buff, right, y, m_scale);
@@ -1296,7 +1316,7 @@ void Sample::Render()
                     DrawStringLeft(m_batch.get(), m_smallFont.get(), L"HeapSerializationTier", left, y, m_scale);
                     y += DrawStringRight(m_batch.get(), m_smallFont.get(), serialTier, right, y, m_scale);
 
-                    wchar_t buff[64] = {};
+                    wchar_t buff[128] = {};
                     swprintf_s(buff, L"%u", d3d12serial.NodeIndex);
                     DrawStringLeft(m_batch.get(), m_smallFont.get(), L"Serialization NodeIndex", left, y, m_scale);
                     y += DrawStringRight(m_batch.get(), m_smallFont.get(), buff, right, y, m_scale);
